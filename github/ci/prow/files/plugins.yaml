@@ -15,7 +15,6 @@ plugins:
   - assign
   - hold
   - release-note
-  - label
   - blunderbuss
 
   rmohr/project-infra:
