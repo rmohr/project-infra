@@ -32,7 +32,7 @@ spec:
               image: gcr.io/k8s-testimages/label_sync:v20180531-20dbd7ab8
               args:
               - --config=/etc/config/labels.yaml
-              - --confirm=true
+              - --confirm=false
               - --orgs=kubevirt
               - --only=kubevirt/kubevirt
               - --token=/etc/github/oauth

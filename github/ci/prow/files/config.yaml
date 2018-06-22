@@ -1,3 +1,5 @@
+prowjob_namespace: prow1
+
 periodics:
 - interval: 10m
   agent: kubernetes
