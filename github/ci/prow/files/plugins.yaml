@@ -2,18 +2,18 @@ config_updater:
   maps:
     github/ci/prow/files/config.yaml:
       name: config
-      namespace: otherNamespace
+      namespace: prow1
     github/ci/prow/files/plugins.yaml:
-      name: plugin
-      namespace: otherNamespace
+      name: plugins
+      namespace: prow1
     github/ci/prow/files/labels.yaml:
       name: label-config
+      namespace: prow1
 
 plugins:
   rmohr/kubevirt:
   - size
   - assign
-  - hold
   - release-note
   - blunderbuss
 
