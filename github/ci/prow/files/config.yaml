@@ -1,4 +1,4 @@
-prowjob_namespace: prow1
+#prowjob_namespace: prow1
 
 periodics:
 - interval: 10m
