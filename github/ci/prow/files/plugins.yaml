@@ -13,6 +13,7 @@ config_updater:
 plugins:
   rmohr/kubevirt:
   - size
+  - hold
   - assign
   - release-note
   - blunderbuss
