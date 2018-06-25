@@ -13,7 +13,6 @@ config_updater:
 plugins:
   rmohr/kubevirt:
   - size
-  - hold
   - label
   - assign
   - release-note
