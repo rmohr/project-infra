@@ -14,6 +14,7 @@ plugins:
   rmohr/kubevirt:
   - size
   - hold
+  - labels
   - assign
   - release-note
   - blunderbuss
