@@ -19,6 +19,7 @@ plugins:
   - lifecycle
   - verify-owners
   - wip
+  - invalid-by-accident
 
   kubevirt/kubevirt:
   - release-note
