@@ -21,7 +21,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=k8s-1.11.0 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -50,7 +50,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=k8s-genie-1.11.1 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -79,7 +79,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=k8s-multus-1.13.3 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -108,7 +108,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=os-3.11.0-crio && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -137,7 +137,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=os-3.11.0-multus && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -166,7 +166,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=os-3.11.0 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -196,7 +196,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=okd-4.1.0 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -226,7 +226,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=okd-4.1.2 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
@@ -255,7 +255,7 @@ presubmits:
         - /bin/sh
         - -c
         - export TARGET=windows2016 && automation/test.sh
-        image: kubevirtci/bootstrap:v20201119-a5880e0
+        image: quay.io/kubevirtci/bootstrap:v20210129-9f1d6a8
         name: ""
         resources:
           requests:
