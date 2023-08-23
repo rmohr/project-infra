@@ -28,7 +28,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/andygrunwald/go-gerrit"
 	"k8s.io/test-infra/prow/config/secret"
+	"kubevirt.io/project-infra/robots/pkg/flakefinder/api"
+	gerritapi "kubevirt.io/project-infra/robots/pkg/flakefinder/gerrit"
 	ghapi "kubevirt.io/project-infra/robots/pkg/flakefinder/github"
 
 	"cloud.google.com/go/storage"
@@ -56,6 +59,8 @@ func flagOptions() options {
 	flag.BoolVar(&o.skipBeforeStartOfReport, "skip_results_before_start_of_report", true, "Whether to skip test results occurring before start of report")
 	flag.StringVar(&o.periodicJobDirRegex, "periodic_job_dir_regex", "", "Regular expression to use for fetching data from periodic jobs, or empty string if not wanted")
 	flag.StringVar(&o.batchJobDirRegex, "batch_job_dir_regex", "pull-kubevirt-e2e-.*", "Regular expression to use for filtering the fetching of batch job data")
+	flag.StringVar(&o.gerritInstance, "gerrit_instance", "", "If pointed to a gerrit instance, gerrit will be used instead of github")
+	flag.StringVar(&o.junitPattern, "junit_pattern", "junit.functest.xml", "Pattern to select junit files")
 	flag.Parse()
 	return o
 }
@@ -75,6 +80,8 @@ type options struct {
 	skipBeforeStartOfReport bool
 	periodicJobDirRegex     string
 	batchJobDirRegex        string
+	gerritInstance          string
+	junitPattern            string
 }
 
 const MaxNumberOfReportsToLinkTo = 50
@@ -88,41 +95,53 @@ func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	o := flagOptions()
 
-	if o.tokenPath == "" {
-		log.Fatal("empty --token")
-	}
-	err := secret.Add(o.tokenPath)
-	if err != nil {
-		log.Fatalf("Failed to load token from path %s: %v", o.tokenPath, err)
-	}
-
 	ReportOutputPath = BuildReportOutputPath(o)
 
 	for _, ep := range o.endpoint.Strings() {
-		_, err = url.ParseRequestURI(ep)
+		_, err := url.ParseRequestURI(ep)
 		if err != nil {
 			log.Fatalf("Invalid --endpoint URL %q: %v.", ep, err)
 		}
 	}
 
 	ctx := context.Background()
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: string(secret.GetSecret(o.tokenPath))},
-	)
-	tc := oauth2.NewClient(ctx, ts)
 
-	ghClient := github.NewClient(tc)
+	var q api.Query
+	if o.gerritInstance == "" {
+		if o.tokenPath == "" {
+			log.Fatal("empty --token")
+		}
+		err := secret.Add(o.tokenPath)
+		if err != nil {
+			log.Fatalf("Failed to load token from path %s: %v", o.tokenPath, err)
+		}
+		ts := oauth2.StaticTokenSource(
+			&oauth2.Token{AccessToken: string(secret.GetSecret(o.tokenPath))},
+		)
+		tc := oauth2.NewClient(ctx, ts)
+
+		ghClient := github.NewClient(tc)
+		q = ghapi.NewQuery(ghClient, o.org, o.repo, o.prBaseBranch)
+	} else {
+		client, err := gerrit.NewClient(o.gerritInstance, nil)
+		if err != nil {
+			log.Fatalf("failed to create gerrit client for instance %v: %v", o.gerritInstance, err)
+		}
+		flakefinder.BucketName = "anthos-baremetal-test-results"
+		q = gerritapi.NewQuery(client, o.repo, o.prBaseBranch)
+		o.org = ""
+	}
 
 	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Fatalf("Failed to create new storage client: %v.\n", err)
 	}
 
-	reportBaseDataOptions := flakefinder.NewReportBaseDataOptions(o.prBaseBranch, o.today, o.merged, o.org, o.repo, o.skipBeforeStartOfReport)
+	reportBaseDataOptions := flakefinder.NewReportBaseDataOptions(o.prBaseBranch, o.today, o.merged, o.org, o.repo, o.skipBeforeStartOfReport, o.junitPattern)
 	reportBaseDataOptions.SetPeriodicJobDirRegex(o.periodicJobDirRegex)
 	reportBaseDataOptions.SetBatchJobDirRegex(o.batchJobDirRegex)
 
-	reportBaseData := flakefinder.GetReportBaseData(ctx, ghapi.NewQuery(ghClient, o.org, o.repo, o.prBaseBranch), storageClient, reportBaseDataOptions)
+	reportBaseData := flakefinder.GetReportBaseData(ctx, q, storageClient, reportBaseDataOptions)
 
 	err = WriteReportToBucket(ctx, storageClient, o.merged, o.org, o.repo, o.isDryRun, reportBaseData)
 	if err != nil {

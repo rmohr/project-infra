@@ -19,11 +19,12 @@ import (
 )
 
 const (
-	BucketName       = "kubevirt-prow"
 	ReportsPath      = "reports/flakefinder"
 	ReportFilePrefix = "flakefinder-"
 	PreviewPath      = "preview"
 )
+
+var BucketName = "kubevirt-prow"
 
 // ListGcsObjects get the slice of gcs objects under a given path
 func ListGcsObjects(ctx context.Context, client *storage.Client, bucketName, prefix, delim string) (
@@ -151,6 +152,7 @@ type ReportBaseDataOptions struct {
 	skipBeforeStartOfReport bool
 	periodicJobDirRegex     *regexp.Regexp
 	batchJobDirRegex        *regexp.Regexp
+	junitPattern            string
 }
 
 func NewReportBaseDataOptions(
@@ -160,8 +162,9 @@ func NewReportBaseDataOptions(
 	org string,
 	repo string,
 	skipBeforeStartOfReport bool,
+	junintPattern string,
 ) ReportBaseDataOptions {
-	return ReportBaseDataOptions{prBaseBranch, today, merged, org, repo, skipBeforeStartOfReport, nil, nil}
+	return ReportBaseDataOptions{prBaseBranch, today, merged, org, repo, skipBeforeStartOfReport, nil, nil, junintPattern}
 }
 
 // SetPeriodicJobDirRegex sets the regex to use for finding periodic job directories if the string is non empty. If the regex does not compile it will panic.
@@ -191,19 +194,23 @@ func GetReportBaseData(ctx context.Context, q api.Query, client *storage.Client,
 	if err != nil {
 		logrus.Fatal(err)
 	}
+	fmt.Println(len(changes))
 
 	var reports []*JobResult
 	var changeNumbers []int
 	for _, change := range changes {
 		changeNumbers = append(changeNumbers, change.ID())
-		r, err := FindUnitTestFiles(ctx, client, BucketName, strings.Join([]string{o.org, o.repo}, "/"), change, startOfReport, o.skipBeforeStartOfReport)
+		repo := strings.Join([]string{o.org, o.repo}, "/")
+		r, err := FindUnitTestFiles(ctx, client, BucketName, repo, change, startOfReport, o.skipBeforeStartOfReport, o.junitPattern)
 		if err != nil {
 			log.Printf("failed to load JUnit file for %v: %v", change.ID(), err)
 		}
 		reports = append(reports, r...)
 	}
+	fmt.Println(reports)
+	fmt.Println("WEEHAAA")
 
-	batchJobResults, err := FindUnitTestFilesForBatchJobs(ctx, client, BucketName, o.batchJobDirRegex, changes, startOfReport, endOfReport)
+	batchJobResults, err := FindUnitTestFilesForBatchJobs(ctx, client, BucketName, o.batchJobDirRegex, changes, startOfReport, endOfReport, o.junitPattern)
 	if err != nil {
 		log.Printf("failed to load JUnit file for batch jobs: %v", err)
 	}

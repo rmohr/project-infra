@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
 	"regexp"
 	"sort"
@@ -31,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/api/iterator"
 	"kubevirt.io/project-infra/robots/pkg/flakefinder/api"
 
 	"cloud.google.com/go/storage"
@@ -52,18 +54,21 @@ func init() {
 	testJobNameRegex = regexp.MustCompile(".*-(e2e(-[a-z\\d]+)?)$")
 }
 
-func FindUnitTestFiles(ctx context.Context, client *storage.Client, bucket, repo string, change api.Change, startOfReport time.Time, skipBeforeStartOfReport bool) ([]*JobResult, error) {
+func FindUnitTestFiles(ctx context.Context, client *storage.Client, bucket, repo string, change api.Change, startOfReport time.Time, skipBeforeStartOfReport bool, junitPattern string) ([]*JobResult, error) {
 
-	dirOfPrJobs := path.Join("pr-logs", "pull", strings.ReplaceAll(repo, "/", "_"), strconv.Itoa(change.ID()))
+	dirOfPrJobs := path.Join("pr-logs", "pull", strings.ReplaceAll(path.Join("gke-internal-review.googlesource.com", repo), "/", "_"), strconv.Itoa(change.ID()))
+	fmt.Println(dirOfPrJobs)
 
+	fmt.Println(bucket)
 	prJobsDirs, err := ListGcsObjects(ctx, client, bucket, dirOfPrJobs+"/", "/")
 	if err != nil {
 		return nil, fmt.Errorf("error listing gcs objects: %v", err)
 	}
+	fmt.Println("AAA")
 
 	junits := []*JobResult{}
 	for _, job := range prJobsDirs {
-		junit, err := findUnitTestFileForJob(ctx, client, bucket, dirOfPrJobs, job, change, startOfReport, skipBeforeStartOfReport)
+		junit, err := findUnitTestFileForJob(ctx, client, bucket, dirOfPrJobs, job, change, startOfReport, skipBeforeStartOfReport, junitPattern)
 		if err != nil {
 			return nil, err
 		}
@@ -74,7 +79,7 @@ func FindUnitTestFiles(ctx context.Context, client *storage.Client, bucket, repo
 	return junits, err
 }
 
-func findUnitTestFileForJob(ctx context.Context, client *storage.Client, bucket string, dirOfPrJobs string, job string, change api.Change, startOfReport time.Time, skipBeforeStartOfReport bool) ([]*JobResult, error) {
+func findUnitTestFileForJob(ctx context.Context, client *storage.Client, bucket string, dirOfPrJobs string, job string, change api.Change, startOfReport time.Time, skipBeforeStartOfReport bool, junitPattern string) ([]*JobResult, error) {
 	dirOfJobs := path.Join(dirOfPrJobs, job)
 
 	prJobs, err := ListGcsObjects(ctx, client, bucket, dirOfJobs+"/", "/")
@@ -82,7 +87,6 @@ func findUnitTestFileForJob(ctx context.Context, client *storage.Client, bucket 
 		return nil, fmt.Errorf("error listing gcs objects: %v", err)
 	}
 	builds := sortBuilds(prJobs)
-	profilePath := ""
 	buildNumber := 0
 	reports := []*JobResult{}
 	for _, build := range builds {
@@ -120,20 +124,37 @@ func findUnitTestFileForJob(ctx context.Context, client *storage.Client, bucket 
 			}
 			buildNumber = build
 			artifactsDirPath := path.Join(buildDirPath, "artifacts")
-			profilePath = path.Join(artifactsDirPath, "junit.functest.xml")
-			data, err := readGcsObject(ctx, client, bucket, profilePath)
-			if err == storage.ErrObjectNotExist {
-				logrus.Infof("Didn't find object '%s' in bucket '%s'\n", profilePath, bucket)
-				continue
+			objects := client.Bucket(bucket).Objects(ctx, &storage.Query{
+				Prefix:    artifactsDirPath,
+				MatchGlob: junitPattern,
+			})
+			var report []junit.Suite
+			for {
+				obj, err := objects.Next()
+				if err == iterator.Done {
+					break
+				}
+				if err != nil {
+					return nil, err
+				}
+				data, err := readGcsObject(ctx, client, bucket, obj.Name)
+				if err == storage.ErrObjectNotExist {
+					logrus.Infof("Didn't find object '%s' in bucket '%s'\n", obj.Name, bucket)
+					continue
+				}
+				if err != nil {
+					return nil, err
+				}
+				newReport, err := junit.Ingest(data)
+				if err != nil {
+					return nil, err
+				}
+				report = append(report, newReport...)
 			}
-			if err != nil {
-				return nil, err
+			if len(reports) > 0 {
+				fmt.Printf("Ingesting %v suites\n", len(report))
+				reports = append(reports, &JobResult{Job: job, JUnit: report, BuildNumber: buildNumber, PR: change.ID()})
 			}
-			report, err := junit.Ingest(data)
-			if err != nil {
-				return nil, err
-			}
-			reports = append(reports, &JobResult{Job: job, JUnit: report, BuildNumber: buildNumber, PR: change.ID()})
 		}
 	}
 
@@ -223,7 +244,7 @@ func FindUnitTestFilesForPeriodicJob(ctx context.Context, client *storage.Client
 	return reports, nil
 }
 
-func FindUnitTestFilesForBatchJobs(ctx context.Context, client *storage.Client, bucket string, batchJobRegex *regexp.Regexp, changes []api.Change, startOfReport time.Time, endOfReport time.Time) ([]*JobResult, error) {
+func FindUnitTestFilesForBatchJobs(ctx context.Context, client *storage.Client, bucket string, batchJobRegex *regexp.Regexp, changes []api.Change, startOfReport time.Time, endOfReport time.Time, junitPattern string) ([]*JobResult, error) {
 
 	changeNumbers := map[int]struct{}{}
 	for _, change := range changes {
@@ -318,7 +339,20 @@ func FindUnitTestFilesForBatchJobs(ctx context.Context, client *storage.Client, 
 				}
 
 				artifactsDirPath := path.Join(buildDirPath, "artifacts")
-				profilePath = path.Join(artifactsDirPath, "junit.functest.xml")
+				objects := client.Bucket(bucket).Objects(ctx, &storage.Query{
+					Prefix:    artifactsDirPath,
+					MatchGlob: junitPattern})
+				for {
+					obj, err := objects.Next()
+					if err == iterator.Done {
+						break
+					}
+					if err == storage.ErrObjectNotExist {
+						continue
+					}
+					fmt.Println(obj.Name)
+					os.Exit(1)
+				}
 				data, err := readGcsObject(ctx, client, bucket, profilePath)
 				if err == storage.ErrObjectNotExist {
 					continue
