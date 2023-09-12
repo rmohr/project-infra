@@ -187,6 +187,11 @@ type ReportBaseData struct {
 	JobResults    []*JobResult
 }
 
+type result struct {
+	reports      []*JobResult
+	changeNumber int
+}
+
 func GetReportBaseData(ctx context.Context, q api.Query, client *storage.Client, o ReportBaseDataOptions) ReportBaseData {
 
 	startOfReport, endOfReport := GetReportInterval(ReportIntervalOptions{o.today, o.merged, time.Now()})
@@ -194,21 +199,35 @@ func GetReportBaseData(ctx context.Context, q api.Query, client *storage.Client,
 	if err != nil {
 		logrus.Fatal(err)
 	}
-	fmt.Println(len(changes))
+
+	resultChan := make(chan result)
+	changeChan := make(chan api.Change, len(changes))
+
+	for i := 0; i < 30; i++ {
+		go worker(ctx, changeChan, o, err, client, startOfReport, resultChan)
+	}
+
+	go func() {
+		for change := range changes {
+			changeChan <- changes[change]
+		}
+	}()
 
 	var reports []*JobResult
 	var changeNumbers []int
-	for _, change := range changes {
-		changeNumbers = append(changeNumbers, change.ID())
-		repo := strings.Join([]string{o.org, o.repo}, "/")
-		r, err := FindUnitTestFiles(ctx, client, BucketName, repo, change, startOfReport, o.skipBeforeStartOfReport, o.junitPattern)
-		if err != nil {
-			log.Printf("failed to load JUnit file for %v: %v", change.ID(), err)
+	processed := 0
+	for res := range resultChan {
+		processed++
+		changeNumbers = append(changeNumbers, res.changeNumber)
+		reports = append(reports, res.reports...)
+		if processed == len(changes) {
+			close(changeChan)
+			break
 		}
-		reports = append(reports, r...)
 	}
-	fmt.Println(reports)
-	fmt.Println("WEEHAAA")
+
+	fmt.Println("DONE")
+	fmt.Println(len(reports))
 
 	batchJobResults, err := FindUnitTestFilesForBatchJobs(ctx, client, BucketName, o.batchJobDirRegex, changes, startOfReport, endOfReport, o.junitPattern)
 	if err != nil {
@@ -236,4 +255,16 @@ func GetReportBaseData(ctx context.Context, q api.Query, client *storage.Client,
 	}
 
 	return ReportBaseData{startOfReport, endOfReport, changeNumbers, reports}
+}
+
+func worker(ctx context.Context, changeChan chan api.Change, o ReportBaseDataOptions, err error, client *storage.Client, startOfReport time.Time, resultChan chan result) {
+	for change := range changeChan {
+		res := result{changeNumber: change.ID()}
+		repo := strings.Join([]string{o.org, o.repo}, "/")
+		res.reports, err = FindUnitTestFiles(ctx, client, BucketName, repo, change, startOfReport, o.skipBeforeStartOfReport, o.junitPattern)
+		if err != nil {
+			log.Printf("failed to load JUnit file for %v: %v", change.ID(), err)
+		}
+		resultChan <- res
+	}
 }
