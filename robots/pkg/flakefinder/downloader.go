@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"path"
 	"regexp"
 	"sort"
@@ -151,7 +150,7 @@ func findUnitTestFileForJob(ctx context.Context, client *storage.Client, bucket 
 				}
 				report = append(report, newReport...)
 			}
-			if len(reports) > 0 {
+			if len(report) > 0 {
 				fmt.Printf("Ingesting %v suites\n", len(report))
 				reports = append(reports, &JobResult{Job: job, JUnit: report, BuildNumber: buildNumber, PR: change.ID()})
 			}
@@ -343,15 +342,13 @@ func FindUnitTestFilesForBatchJobs(ctx context.Context, client *storage.Client, 
 					Prefix:    artifactsDirPath,
 					MatchGlob: junitPattern})
 				for {
-					obj, err := objects.Next()
+					_, err := objects.Next()
 					if err == iterator.Done {
 						break
 					}
 					if err == storage.ErrObjectNotExist {
 						continue
 					}
-					fmt.Println(obj.Name)
-					os.Exit(1)
 				}
 				data, err := readGcsObject(ctx, client, bucket, profilePath)
 				if err == storage.ErrObjectNotExist {
