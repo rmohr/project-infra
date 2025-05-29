@@ -26,6 +26,7 @@ type options struct {
 	continueOnError bool
 	verify          bool
 	dir             string
+	requiresAuth    bool
 }
 
 func (o *options) Validate() error {
@@ -43,6 +44,7 @@ func gatherOptions() options {
 	fs.BoolVar(&o.continueOnError, "continue-on-error", false, "Try to upload as many artifacts as possible. Exit code will still be non-zero in case of errors")
 	fs.StringVar(&o.bucket, "bucket", "builddeps", "bucket where to upload")
 	fs.StringVar(&o.dir, "dir", "", "directory inside the bucket")
+	fs.BoolVar(&o.requiresAuth, "requires-auth", false, "set to true if the bucket requires authentication for downloading artifacts")
 	fs.StringVar(&o.workspacePath, "workspace", "", "path to the workspace file")
 	fs.Parse(os.Args[1:])
 	return o
@@ -122,6 +124,11 @@ func upload(options options, workspace *build.File, artifacts []mirror.Artifact)
 			}
 		}
 		artifact.AppendURL(newFileUrl)
+		if options.requiresAuth {
+			artifact.SetAuthPattern(map[string]string{
+				"storage.cloudprovider.com": "Bearer <password>",
+			})
+		}
 	}
 
 	mirror.RemoveStaleDownloadURLS(artifacts, targetMirrorURLPattern, http.DefaultClient)

@@ -31,6 +31,18 @@ func (a *Artifact) URLs() []string {
 	return a.rule.AttrStrings("urls")
 }
 
+func (a *Artifact) SetAuthPattern(patterns map[string]string) {
+	expr := []*build.KeyValueExpr{}
+
+	for k, v := range patterns {
+		expr = append(expr, &build.KeyValueExpr{
+			Key:   &build.StringExpr{Value: k},
+			Value: &build.StringExpr{Value: v},
+		})
+	}
+	a.rule.SetAttr("auth_patterns", &build.DictExpr{List: expr})
+}
+
 func (a *Artifact) Name() string {
 	return a.rule.AttrString("name")
 }
